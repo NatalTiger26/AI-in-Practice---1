@@ -1,0 +1,2 @@
+{"run_id": "20260831-143356", "span_id": "d97c3db78130", "parent_id": null, "name": "llm.call", "ts": 1788167036.921739, "model": "gemini/gemini-3.5-flash-lite", "cached": false, "prompt_tokens": 6, "completion_tokens": 1, "cost_usd": 4e-06, "latency_ms": 1318.6, "finish_reason": "stop", "status": "ok", "duration_ms": 1318.64}
+{"run_id": "20260831-143356", "span_id": "4540fafacac0", "parent_id": null, "name": "embed.batch", "ts": 1788167038.243891, "model": "gemini/gemini-embedding-001", "n": 1, "n_uncached": 1, "status": "ok", "duration_ms": 527.86}
