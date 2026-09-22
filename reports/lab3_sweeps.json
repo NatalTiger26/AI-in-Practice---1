@@ -1,0 +1,196 @@
+{
+  "n_questions": 42,
+  "excluded_empty_relevant": [
+    "Q36",
+    "Q38",
+    "Q39"
+  ],
+  "baseline": {
+    "config": "sliding-800 dense",
+    "hit_rate@1": 0.7857,
+    "hit_rate@5": 0.9286,
+    "recall@5": 0.8452,
+    "mrr": 0.8451,
+    "ndcg@10": 0.8053,
+    "latency_p95_ms": 2.0971
+  },
+  "chunking_800": {
+    "fixed": {
+      "n_chunks": 83,
+      "hit_rate@1": 0.7381,
+      "recall@5": 0.8373,
+      "mrr": 0.8387,
+      "ndcg@10": 0.7952
+    },
+    "sliding": {
+      "n_chunks": 91,
+      "hit_rate@1": 0.7857,
+      "recall@5": 0.8452,
+      "mrr": 0.8451,
+      "ndcg@10": 0.8053
+    },
+    "recursive": {
+      "n_chunks": 98,
+      "hit_rate@1": 0.7857,
+      "recall@5": 0.8393,
+      "mrr": 0.8552,
+      "ndcg@10": 0.8127
+    },
+    "markdown": {
+      "n_chunks": 164,
+      "hit_rate@1": 0.7619,
+      "recall@5": 0.8988,
+      "mrr": 0.872,
+      "ndcg@10": 0.8458
+    }
+  },
+  "size_sweep_markdown": {
+    "400": {
+      "n_chunks": 235,
+      "hit_rate@1": 0.7857,
+      "recall@5": 0.9028,
+      "mrr": 0.88,
+      "ndcg@10": 0.8527
+    },
+    "800": {
+      "n_chunks": 164,
+      "hit_rate@1": 0.7619,
+      "recall@5": 0.8988,
+      "mrr": 0.872,
+      "ndcg@10": 0.8458
+    },
+    "1600": {
+      "n_chunks": 150,
+      "hit_rate@1": 0.7143,
+      "recall@5": 0.875,
+      "mrr": 0.8262,
+      "ndcg@10": 0.8075
+    }
+  },
+  "prefix_markdown_400": {
+    "with": {
+      "hit_rate@1": 0.7857,
+      "hit_rate@5": 0.9762,
+      "recall@5": 0.9028,
+      "mrr": 0.88,
+      "ndcg@10": 0.8527
+    },
+    "without": {
+      "hit_rate@1": 0.6905,
+      "hit_rate@5": 1.0,
+      "recall@5": 0.9107,
+      "mrr": 0.8131,
+      "ndcg@10": 0.8204
+    }
+  },
+  "retrieval_markdown_400": {
+    "dense": {
+      "hit_rate@1": 0.7857,
+      "recall@5": 0.9028,
+      "mrr": 0.88,
+      "ndcg@10": 0.8527,
+      "Q44_mrr": 0.5,
+      "Q41_mrr": 1.0
+    },
+    "bm25": {
+      "hit_rate@1": 0.4762,
+      "recall@5": 0.7956,
+      "mrr": 0.6698,
+      "ndcg@10": 0.6978,
+      "Q44_mrr": 1.0,
+      "Q41_mrr": 0.0
+    },
+    "hybrid": {
+      "hit_rate@1": 0.6667,
+      "recall@5": 0.8631,
+      "mrr": 0.7976,
+      "ndcg@10": 0.7949,
+      "Q44_mrr": 1.0,
+      "Q41_mrr": 0.25
+    }
+  },
+  "rrf_k": {
+    "10": {
+      "ndcg@10": 0.8156,
+      "mrr": 0.8115
+    },
+    "30": {
+      "ndcg@10": 0.7949,
+      "mrr": 0.7976
+    },
+    "60": {
+      "ndcg@10": 0.7949,
+      "mrr": 0.7976
+    },
+    "100": {
+      "ndcg@10": 0.7901,
+      "mrr": 0.7976
+    }
+  },
+  "hybrid_weights": {
+    "1:1": {
+      "ndcg@10": 0.7949,
+      "hit_rate@1": 0.6667
+    },
+    "2:1_dense": {
+      "ndcg@10": 0.8068,
+      "hit_rate@1": 0.6905
+    },
+    "1:2_bm25": {
+      "ndcg@10": 0.7926,
+      "hit_rate@1": 0.7143
+    }
+  },
+  "rerank": {
+    "dense_k5": {
+      "hit_rate@1": 0.7857,
+      "mrr": 0.877,
+      "ndcg@5": 0.8313,
+      "latency_p95_ms": 0.277
+    },
+    "ce": {
+      "hit_rate@1": 0.7619,
+      "mrr": 0.8619,
+      "ndcg@5": 0.8174,
+      "latency_p95_ms": 147.5
+    },
+    "llm": {
+      "hit_rate@1": 0.8571,
+      "mrr": 0.9048,
+      "ndcg@5": 0.8512,
+      "latency_p95_ms": 36969.08
+    }
+  },
+  "index": {
+    "exact": {
+      "ndcg@10": 0.8527,
+      "latency_p95_ms": 0.2662
+    },
+    "chroma": {
+      "ndcg@10": 0.8527,
+      "latency_p95_ms": 1.421
+    }
+  },
+  "metadata_filter_Q29_Q31": {
+    "Q29": {
+      "before_hit1": 1.0,
+      "after_hit1": 1.0
+    },
+    "Q30": {
+      "before_hit1": 0.0,
+      "after_hit1": 1.0
+    },
+    "Q31": {
+      "before_hit1": 1.0,
+      "after_hit1": 1.0
+    }
+  },
+  "recommendation": {
+    "chunking": "markdown-400 with heading prefix",
+    "retriever": "dense",
+    "rerank_interactive": "none",
+    "rerank_batch": "LLM if budget allows",
+    "index": "exact at this scale",
+    "filter": "status=current"
+  }
+}
