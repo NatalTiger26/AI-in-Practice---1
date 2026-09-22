@@ -33,36 +33,111 @@ LABEL_SHEET = ROOT / "labs/lab4/calibration_labels.jsonl"
 
 
 def build_retriever():
-    """TODO: use YOUR Lab 3 winning configuration, not this placeholder."""
+    """TODO: use YOUR Lab 3 winning configuration, not this placeholder.
+
+    Lab 3 result: markdown-aware chunking, size=400, dense retrieval, keep
+    heading prefix (default markdown_chunks behaviour).
+    """
     corpus = load_corpus()
     chunks = [c for doc_id, text in corpus.items()
-              for c in markdown_chunks(text, doc_id, size=800)]
+              for c in markdown_chunks(text, doc_id, size=400)]
     return DenseRetriever(chunks)
+
+
+# Improved rubrics (D1) — still single-criterion, but explicit on partial
+# refusal, paraphrase-strengthening, and refusal-vs-reference.
+FAITHFULNESS_RUBRIC = """\
+You grade whether an ANSWER is fully supported by the provided CONTEXT only.
+
+Rules:
+- Judge support only. Do NOT judge helpfulness, style, or real-world truth.
+- Score 1 only if every factual claim is supported by the context.
+- Score 0 if any claim is missing from the context, even if true in the world.
+- Paraphrase is fine; strengthening a claim beyond the context is not.
+- A full refusal when the context is insufficient is SUPPORTED (score 1).
+- A partial answer (answers what is supported, refuses the rest) is SUPPORTED
+  if the answered part is in the context and the refusal is honest.
+
+CONTEXT:
+{context}
+
+ANSWER:
+{answer}
+
+Reply as JSON: {{"score": 0 or 1, "unsupported_claims": ["..."], "reason": "one sentence"}}
+"""
+
+CORRECTNESS_RUBRIC = """\
+Compare a CANDIDATE answer to a REFERENCE answer for the same question.
+
+Score 2 = same substantive content as the reference (wording may differ),
+          OR both correctly refuse when the reference is a refusal / "not in sources".
+Score 1 = partially correct: some correct content, but omits something important
+          the reference states, or only answers part of a multi-part question.
+Score 0 = wrong content, invents facts, OR answers confidently when the reference
+          refuses, OR refuses when the reference gives a clear answer.
+
+QUESTION: {question}
+REFERENCE: {reference}
+CANDIDATE: {candidate}
+
+Reply as JSON: {{"score": 0|1|2, "reason": "one sentence"}}
+"""
 
 
 # ---------------------------------------------------------------------------
 # judges (yours)
 # ---------------------------------------------------------------------------
-def judge_faithfulness(answer_text: str, context: str) -> int:
+def judge_faithfulness(answer_text: str, context: str) -> int | None:
     """TODO D1: improve JUDGE_RUBRIC_FAITHFULNESS and return 0 or 1.
 
     Things the shipped rubric does not yet handle well:
       - a partial refusal (answers part, refuses part)
       - an answer that cites correctly but paraphrases into a stronger claim
       - an answer that is right about the world and wrong about the context
+
+    Parse failures are missing data — return None, do not score as 0.
     """
-    verdict = llm_judge(JUDGE_RUBRIC_FAITHFULNESS.format(
-        context=context[:8000], answer=answer_text), tier="LARGE")
-    return int(verdict.get("score", 0))
+    verdict = llm_judge(
+        FAITHFULNESS_RUBRIC.format(context=context[:8000], answer=answer_text),
+        tier="LARGE",
+        max_tokens=2048,
+    )
+    if not isinstance(verdict, dict) or verdict.get("parse_error"):
+        return None
+    if "score" not in verdict:
+        return None
+    return int(verdict["score"])
 
 
-def judge_correctness(question: str, candidate: str, reference: str) -> int:
+def judge_correctness(question: str, candidate: str, reference: str) -> int | None:
     """TODO D1: returns 0, 1 or 2. Handle refusal cases explicitly --
     a correct refusal on an unanswerable question must score 2, and the
-    shipped rubric does not say so."""
-    verdict = llm_judge(JUDGE_RUBRIC_CORRECTNESS.format(
-        question=question, reference=reference, candidate=candidate), tier="LARGE")
-    return int(verdict.get("score", 0))
+    shipped rubric does not say so.
+
+    Parse failures are missing data — return None, do not score as 0.
+    """
+    # Fast path: both look like our exact refusal string
+    ref_refuses = REFUSAL[:40] in (reference or "") or (reference or "").strip().startswith("I don't have enough")
+    cand_refuses = (candidate or "").strip().startswith(REFUSAL[:40])
+    if ref_refuses and cand_refuses:
+        return 2
+    if ref_refuses and not cand_refuses:
+        # candidate answered when gold says refuse
+        return 0
+
+    verdict = llm_judge(
+        CORRECTNESS_RUBRIC.format(
+            question=question, reference=reference, candidate=candidate
+        ),
+        tier="LARGE",
+        max_tokens=2048,
+    )
+    if not isinstance(verdict, dict) or verdict.get("parse_error"):
+        return None
+    if "score" not in verdict:
+        return None
+    return int(verdict["score"])
 
 
 # ---------------------------------------------------------------------------
@@ -91,12 +166,20 @@ def run_full(save: str = "") -> None:
     una = [r for r in rows if r["unanswerable"]]
     refusals = [r for r in rows if r["refused"]]
 
+    def _mean(vals):
+        vals = [v for v in vals if v is not None]
+        return statistics.fmean(vals) if vals else float("nan")
+
     print(f"\nn = {len(rows)}  ({len(ans)} answerable, {len(una)} unanswerable)")
-    print(f"citation validity   {statistics.fmean(r['citations_valid'] for r in rows):.3f}"
+    print(f"citation validity   {_mean(r['citations_valid'] for r in rows):.3f}"
           "   (target 1.000)")
-    print(f"faithfulness        {statistics.fmean(r['faithfulness'] for r in rows):.3f}")
-    print(f"correctness (0-2)   {statistics.fmean(r['correctness'] for r in ans):.3f}"
-          f"  normalised {statistics.fmean(r['correctness'] for r in ans) / 2:.3f}")
+    faith_vals = [r["faithfulness"] for r in rows]
+    print(f"faithfulness        {_mean(faith_vals):.3f}"
+          f"   (excluded {sum(1 for v in faith_vals if v is None)} parse_errors)")
+    corr_vals = [r["correctness"] for r in ans]
+    print(f"correctness (0-2)   {_mean(corr_vals):.3f}"
+          f"  normalised {_mean(corr_vals) / 2:.3f}"
+          f"   (excluded {sum(1 for v in corr_vals if v is None)} parse_errors)")
     rec = (sum(1 for r in una if r["refused"]) / len(una)) if una else 0.0
     prec = (sum(1 for r in refusals if r["unanswerable"]) / len(refusals)) if refusals else 1.0
     print(f"refusal recall      {rec:.3f}   ({sum(1 for r in una if r['refused'])}/{len(una)})")
@@ -107,7 +190,7 @@ def run_full(save: str = "") -> None:
     kinds = sorted({r["kind"] for r in ans})
     for kind in kinds:
         sub = [r for r in ans if r["kind"] == kind]
-        print(f"  {kind:<16} {statistics.fmean(r['correctness'] for r in sub)/2:.3f}"
+        print(f"  {kind:<16} {_mean(r['correctness'] for r in sub)/2:.3f}"
               f"  n={len(sub)}")
 
     if save:
@@ -127,14 +210,17 @@ def run_gold_context() -> None:
     with Budget(limit_usd=1.00, label="lab4-decomposition"):
         for q in questions:
             a = answer_question(q["question"], retriever)
-            retrieved_scores.append(
-                judge_correctness(q["question"], a.text, q["gold_answer"]) / 2)
+            s_r = judge_correctness(q["question"], a.text, q["gold_answer"])
+            if s_r is not None:
+                retrieved_scores.append(s_r / 2)
             g = answer_with_gold_context(
                 q["question"], [corpus[d] for d in q["relevant_docs"] if d in corpus])
-            gold_scores.append(
-                judge_correctness(q["question"], g.text, q["gold_answer"]) / 2)
+            s_g = judge_correctness(q["question"], g.text, q["gold_answer"])
+            if s_g is not None:
+                gold_scores.append(s_g / 2)
 
-    A, B = statistics.fmean(gold_scores), statistics.fmean(retrieved_scores)
+    A = statistics.fmean(gold_scores) if gold_scores else float("nan")
+    B = statistics.fmean(retrieved_scores) if retrieved_scores else float("nan")
     print(f"\ncorrectness with GOLD context       A = {A:.3f}   <- generation ceiling")
     print(f"correctness with RETRIEVED context  B = {B:.3f}   <- your system")
     print(f"retrieval-attributable loss   A - B = {A - B:.3f}")
