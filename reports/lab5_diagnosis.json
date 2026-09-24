@@ -1,0 +1,146 @@
+[
+  {
+    "id": "Q04",
+    "kind": "single_hop",
+    "mode": 6,
+    "mode_name": "generation",
+    "evidence": "relevant doc(s) ['pre-existing-conditions', 'pre-existing-conditions', 'pre-existing-conditions'] were in final context but correctness=1; generator failed with gold present",
+    "question": "What is the waiting period for pre-existing diseases?",
+    "answer": "For standard retail plans, pre-existing diseases generally carry a 36-month waiting period unless Aurora explicitly waives it in writing on the policy schedule [3][5]. Under the Aurora Senior Care plan for ages 60 and above, the pre-existing disease waiting period is reduced to 24 months [5]."
+  },
+  {
+    "id": "Q05",
+    "kind": "single_hop",
+    "mode": 6,
+    "mode_name": "generation",
+    "evidence": "relevant doc(s) ['policy-renewal-and-portability', 'policy-renewal-and-portability', 'policy-renewal-and-portability'] were in final context but correctness=1; generator failed with gold present",
+    "question": "How long is the grace period for an annual policy?",
+    "answer": "The grace period for an annual policy is 30 days from the renewal due date [1][5]."
+  },
+  {
+    "id": "Q10",
+    "kind": "single_hop",
+    "mode": 6,
+    "mode_name": "generation",
+    "evidence": "relevant doc(s) ['grievance-redressal', 'grievance-redressal'] were in final context but correctness=1; generator failed with gold present",
+    "question": "Who can I escalate to if Aurora rejects my claim and their internal response is unsatisfactory?",
+    "answer": "If you are not satisfied with the Stage 1 outcome, you can escalate the matter to Aurora's Grievance Redressal Officer [2]. If Aurora's final response is unsatisfactory, you may approach the Insurance Ombudsman for your region [1]."
+  },
+  {
+    "id": "Q11",
+    "kind": "single_hop",
+    "mode": 6,
+    "mode_name": "generation",
+    "evidence": "relevant doc(s) ['plans-overview'] were in final context but correctness=1; generator failed with gold present",
+    "question": "How much ambulance cover is there?",
+    "answer": "Across all Aurora Health plans, road ambulance cover is ₹5,000 per hospitalisation [1]. Additionally, the Aurora Gold plan provides air ambulance cover up to ₹2,50,000 per policy year within India, subject to prior authorisation [5]."
+  },
+  {
+    "id": "Q19",
+    "kind": "multi_hop",
+    "mode": 6,
+    "mode_name": "generation",
+    "evidence": "relevant doc(s) ['claims-process', 'plan-silver', 'plan-silver', 'claims-process'] were in final context but correctness=1; generator failed with gold present",
+    "question": "I am on Silver with a 5 lakh sum insured and took a room at Rs 15,000 per day. Will everything be paid?",
+    "answer": "No, not everything will be paid [5]. Under a Silver plan with a ₹5,00,000 sum insured, the room-rent limit is 2%, which is ₹10,000 per day [1][2]. Because a ₹15,000 room exceeds this limit, an eligibility ratio of 0.667 is applied, leading to proportionate deductions across various billed expenses ["
+  },
+  {
+    "id": "Q20",
+    "kind": "multi_hop",
+    "mode": 6,
+    "mode_name": "generation",
+    "evidence": "relevant doc(s) ['dependents-and-family-floater', 'dependents-and-family-floater', 'dependents-and-family-floater', 'dependents-and-family-floater'] were in final context but correctness=1; generator failed with gold present",
+    "question": "My mother is 63 and I want to add her to my policy. Which plans allow it and what changes?",
+    "answer": "Dependent parents can be added under the Silver plan (at an extra premium), Gold plan, and Platinum plan, but are not permitted under the Bronze plan [1]. When a parent is added, the policy premium is determined by the age of the eldest covered member, which often makes the floater more expensive th"
+  },
+  {
+    "id": "Q21",
+    "kind": "multi_hop",
+    "mode": 6,
+    "mode_name": "generation",
+    "evidence": "relevant doc(s) ['policy-renewal-and-portability', 'pre-existing-conditions', 'pre-existing-conditions'] were in final context but correctness=1; generator failed with gold present",
+    "question": "I am switching from another insurer. Will my 3 years of waiting period carry over if I increase my sum insured?",
+    "answer": "Waiting periods already served with a previous insurer will carry over, but only up to the sum insured of your previous policy, including any accrued no-claim bonus [1][2]. Any increase or excess in the sum insured will be subject to fresh waiting periods on that incremental amount [1][2]."
+  },
+  {
+    "id": "Q22",
+    "kind": "multi_hop",
+    "mode": 6,
+    "mode_name": "generation",
+    "evidence": "relevant doc(s) ['maternity-benefits', 'maternity-benefits', 'maternity-benefits', 'maternity-benefits'] were in final context but correctness=0; generator failed with gold present",
+    "question": "My baby was born last week. What do I need to do and by when?",
+    "answer": "I don't have enough information in the provided sources to answer that."
+  },
+  {
+    "id": "Q23",
+    "kind": "multi_hop",
+    "mode": 6,
+    "mode_name": "generation",
+    "evidence": "relevant doc(s) ['outpatient-and-wellness', 'outpatient-and-wellness', 'plan-bronze'] were in final context but correctness=0; generator failed with gold present",
+    "question": "Can I get an out-patient physiotherapy session reimbursed on Bronze?",
+    "answer": "I don't have enough information in the provided sources to answer that."
+  },
+  {
+    "id": "Q26",
+    "kind": "multi_hop",
+    "mode": 6,
+    "mode_name": "generation",
+    "evidence": "relevant doc(s) ['pre-existing-conditions', 'pre-existing-conditions', 'pre-existing-conditions', 'pre-existing-conditions'] were in final context but correctness=1; generator failed with gold present",
+    "question": "Is knee replacement covered immediately after I buy the policy?",
+    "answer": "Knee joint replacement is not covered immediately and is subject to a 24-month waiting period unless it is required following an accident [1][5]. If the knee replacement is needed due to an accidental injury, it is covered immediately from day one [2][5]."
+  },
+  {
+    "id": "Q29",
+    "kind": "trap_archived",
+    "mode": 6,
+    "mode_name": "generation",
+    "evidence": "relevant doc(s) ['claims-timelines', 'claims-timelines', 'claims-timelines'] were in final context but correctness=1; generator failed with gold present",
+    "question": "How many days do I have to respond to a query Aurora raises on my claim?",
+    "answer": "For a health reimbursement claim, you have 45 days from the date of the query to submit your response, after which Aurora closes the claim [2][5]. For an Aurora motor insurance claim, you have 30 days from the date of the query to respond [4]."
+  },
+  {
+    "id": "Q32",
+    "kind": "aggregation",
+    "mode": 6,
+    "mode_name": "generation",
+    "evidence": "relevant doc(s) ['plan-gold', 'plans-overview'] were in final context but correctness=1; generator failed with gold present",
+    "question": "Which plans have no co-payment?",
+    "answer": "Aurora Gold has no co-payment at all ages [1]. Additionally, Aurora Silver has no co-payment for insured members below the age of 60 [2]."
+  },
+  {
+    "id": "Q35",
+    "kind": "aggregation",
+    "mode": 6,
+    "mode_name": "generation",
+    "evidence": "relevant doc(s) ['exclusions', 'exclusions', 'exclusions', 'exclusions'] were in final context but correctness=1; generator failed with gold present",
+    "question": "List everything that is excluded relating to dental treatment.",
+    "answer": "Under Aurora Health plans, dental treatment and oral surgery are permanently excluded unless necessitated by an accidental injury requiring hospitalisation [2][3]. Out-patient dental work is also listed as not covered by any plan [1]."
+  },
+  {
+    "id": "Q37",
+    "kind": "unanswerable",
+    "mode": 2,
+    "mode_name": "chunk_boundary",
+    "evidence": "needs_human_check: open the chunks around the gold answer",
+    "question": "Does Aurora cover treatment in Singapore, and up to what limit?",
+    "answer": "I don't have enough information in the provided sources to answer that."
+  },
+  {
+    "id": "Q41",
+    "kind": "paraphrase",
+    "mode": 6,
+    "mode_name": "generation",
+    "evidence": "relevant doc(s) ['policy-renewal-and-portability', 'policy-renewal-and-portability', 'policy-renewal-and-portability'] were in final context but correctness=0; generator failed with gold present",
+    "question": "If I skip paying on time, how long before I lose everything I've built up?",
+    "answer": "I don't have enough information in the provided sources to answer that."
+  },
+  {
+    "id": "Q44",
+    "kind": "paraphrase",
+    "mode": 6,
+    "mode_name": "generation",
+    "evidence": "relevant doc(s) ['plan-silver'] were in final context but correctness=0; generator failed with gold present",
+    "question": "AUR-HI-SIL-2026 — what are the sum insured options?",
+    "answer": "I don't have enough information in the provided sources to answer that."
+  }
+]

@@ -2,11 +2,13 @@
 
 Retriever from Lab 3: **markdown-400 dense** (heading prefix kept), `k=12`, `final_k=5`, no reranker.
 
-**n = 45** (40 answerable, 5 unanswerable). Metrics below from:
+**n = 45** (40 answerable, 5 unanswerable).
 
 ```bash
 python labs/lab4/evaluate.py --full --save reports/lab4.json
 python labs/lab4/evaluate.py --gold-context
+python labs/lab4/calibrate_interactive.py
+python labs/lab4/evaluate.py --kappa
 ```
 
 ---
@@ -19,12 +21,12 @@ python labs/lab4/evaluate.py --gold-context
 | Faithfulness | ≥ 0.90 | **0.956** | yes |
 | Answer correctness (norm) | ≥ 0.75 | **0.762** | yes |
 | Refusal recall | ≥ 4/5 | **5/5 (1.00)** | yes |
-| Refusal precision | ≥ 0.70 | **0.556 (5/9)** | **no** |
+| Refusal precision | ≥ 0.70 | **0.556 (5/9)** | no |
 | Cost / query | ≤ $0.01 | ~$0.011 ($0.512 / 45) | slightly over |
 | p95 e2e | ≤ 6,000 ms | 6,259 ms | slightly over |
 
 Correctness raw mean on answerable: **1.525 / 2**.  
-Parse errors excluded: **0**.
+Judge parse errors excluded: **0**.
 
 ### By kind (correctness / 2)
 
@@ -36,72 +38,91 @@ Parse errors excluded: **0**.
 | multi_hop | 0.600 | 10 |
 | paraphrase | 0.600 | 5 |
 
-Weakest: multi-hop and paraphrase — matches Lab 3, where those kinds were also harder for ranking.
+Weakest: multi-hop and paraphrase (same kinds that were hard in Lab 3 retrieval).
 
 ---
 
-## Part A — Prompt
+## Part A — Generation prompt
 
-`ANSWER_SYSTEM` enforces: sources only, `[n]` cites, no invented indices, exact `REFUSAL` string, partial answers when only part is supported, surface disagreements, short answers, plus `UNTRUSTED_SYSTEM_CLAUSE`.
+`ANSWER_SYSTEM` requires:
+
+1. Answer only from numbered sources (no general knowledge)
+2. Cite factual sentences as `[n]` / `[n][m]`
+3. Never invent a citation index
+4. Exact `REFUSAL` string when sources are insufficient
+5. Partial answers when only part of the question is supported
+6. Surface source disagreements; do not pick silently
+7. Short answers (about 2–3 sentences)
+8. `UNTRUSTED_SYSTEM_CLAUSE` (for Lab 6)
 
 ---
 
-## Part B — Citations
+## Part B — Citation enforcement
 
-`validate_answer` rejects out-of-range `[n]`, truncation (`finish_reason=length`), empty text, and non-refusal answers with zero cites.
+`validate_answer` checks:
 
-**B3 policy:** one corrective retry → if still invalid, exact refusal.  
-Never returns `citations_valid=False` with `refused=False`.
+- every `[n]` in `1..n_sources`
+- not truncated (`finish_reason == "length"`)
+- non-empty
+- at least one citation unless the answer is a refusal
 
-**Result:** citation validity **1.000** — code guarantee held.
+**B3 policy:** one corrective retry with the failure reason; if still invalid → exact `REFUSAL`.  
+Never return `citations_valid=False` and `refused=False` together.
+
+**Measured citation validity: 1.000** (code path held on all 45).
 
 ---
 
 ## Part C — Refusal
 
-### Counts (required; n=5 is noisy)
+### Raw counts (n_unanswerable = 5 — noisy)
 
 | | count |
 |---|---|
-| Should refuse (unanswerable) | 5 |
-| Refused ∩ should | **5** |
+| Should refuse | 5 |
+| Refused and should | **5** |
 | Total refused | **9** |
 | False refusals (answerable) | **4** |
 
 ```
-recall    = 5/5 = 1.00
-precision = 5/9 = 0.556
+refusal recall    = 5/5 = 1.00
+refusal precision = 5/9 = 0.556
 ```
 
-One extra case moves precision by ~0.11 and recall by 0.20 — treat these as a **direction**, not a precise measurement (T3 §2.1).
+One case moves recall by 0.20 and precision by ~0.11. These ratios are a **direction**, not a precise measurement.
 
-### C2 · Q37
+### C2 · Q37 (partial support)
 
-Prompt allows partial answers (supported part + refuse unsupported limit). Full run still shows over-refusal on some answerable items; product dial below addresses that.
+Prompt rule allows: answer the supported part with citations; refuse the unsupported limit. Over-refusal on some *answerable* items still shows up in the precision count.
 
-### C4 · product decision (insurance helpdesk)
+### C4 · product dial (insurance helpdesk)
 
-Current dial is **recall-heavy** (never miss a true unanswerable, but refuse 4 answerable).  
+Current dial is **recall-heavy** (caught all 5 unanswerable; also refused 4 answerable).
 
-For a claims/policy helpdesk I would **tighten precision** slightly: false answers on deadlines/limits are more expensive than an occasional “I don’t have enough information…”, but **four** false refusals on answerable questions will annoy agents. Next step: soften the refusal rule one notch (e.g. only refuse when *no* cited support exists for the main ask) and re-measure both ratios. Do not chase 1.00 recall at the cost of precision without a cost argument.
+For a claims/policy desk I would **nudge toward precision**: inventing a deadline is worse than refusing, but four false refusals train agents to ignore the tool. Soften slightly (refuse only when the main ask has no cited support) and re-measure both ratios. Do not optimise recall alone.
 
 ---
 
-## Part D — Judges
+## Part D — Judges and calibration
 
-Rubrics improved for partial refusal and “refuse when reference refuses → score 2”.  
-`parse_error` → `None` (not 0). This run: **0 parse errors**.
+### Rubrics
 
-### Calibration (D2)
+- **Faithfulness:** support from context only; partial/honest refusal counts as supported; world-true but context-false → 0.
+- **Correctness:** 0/1/2; correct refusal when gold refuses → **2**; answering when gold refuses → **0**.
+- Parse failures → `None` (missing data), not 0.
 
-```bash
-python labs/lab4/evaluate.py --calibrate
-# fill human_faithfulness (0/1) and human_correctness (0/1/2)
-# in labs/lab4/calibration_labels.jsonl  for 20 rows
-python labs/lab4/evaluate.py --kappa
-```
+### D2 · hand labels + κ (n = 20)
 
-κ not yet computed (labels empty). Required before treating judge scores as final; if κ < 0.4, fix the rubric text, not the model.
+| Metric | Raw agreement | Cohen’s κ |
+|---|---|---|
+| Faithfulness | **0.95** | **0.00** |
+| Correctness | **0.95** | **0.875** |
+
+**Correctness κ = 0.875** — well above 0.4; judge is usable for that axis.
+
+**Faithfulness κ = 0.00** with **95% raw agreement** is the class-imbalance / ceiling effect: almost all items are label **1** for both human and judge, so chance agreement is also ~0.95 and κ collapses. That does **not** mean the rubric failed. For faithfulness, **raw agreement is the meaningful figure** on this set.
+
+Judge headline scores (faithfulness 0.956, correctness 0.762) are reported under this calibration.
 
 ---
 
@@ -114,46 +135,48 @@ python labs/lab4/evaluate.py --kappa
 | Retrieval-attributable loss **A − B** | **0.167** |
 | Generation-attributable loss **1 − A** | **0.071** |
 
-**Retrieval loss > generation loss** → Lab 5 should prioritise retrieval / context assembly more than prompt-only tweaks. Generation is already strong when given the right docs (0.929).
+**Retrieval loss > generation loss** → Lab 5 should prioritise retrieval / context assembly over further prompt-only tweaks. With the right documents, generation already scores 0.929.
 
 ---
 
-## Cost & latency
+## Cost and latency
 
 | | |
 |---|---|
-| Full run | 142 calls, $0.512, p50 2.9 s, p95 **6.3 s** |
+| Full eval run | 142 calls · **$0.512** · p50 2.9 s · p95 **6.3 s** |
 | Drivers | generate + 2× LARGE judge per question |
 
-Slightly over the $0.01/query and 6 s p95 targets because judges dominate. Production path (no faithfulness/correctness judges online) would be generate-only and much cheaper/faster; the eval harness is intentionally expensive.
+Slightly over $0.01/query and 6 s p95 **because the eval harness runs judges**. Production path (generate + citation check only) is cheaper and faster; online faithfulness/correctness judges stay off.
 
 ---
 
-## Recommended config (carry to Lab 5)
+## Recommended config (into Lab 5)
 
 | piece | choice |
 |---|---|
-| Chunk / retrieve | markdown-400 dense, k=12 → final_k=5 |
+| Chunk / retrieve | markdown-400 dense · k=12 → final_k=5 |
 | Rerank | none |
-| Generate | MAIN, temp 0, max_tokens 600, ANSWER_SYSTEM as written |
-| Validate | enforce cites + truncation; 1 repair then REFUSAL |
+| Generate | MAIN · temp 0 · max_tokens 600 · ANSWER_SYSTEM as in `rag.py` |
+| Validate | enforce citations + truncation · 1 repair · then REFUSAL |
 | Online judges | off (eval only) |
 
 ---
 
 ## Surprises
 
-1. Citation validity hit 1.0 cleanly — validator on the return path works.  
-2. Faithfulness high (0.956) while multi-hop/paraphrase correctness lag — grounding ok, content coverage weaker.  
+1. Citation validity 1.0 with a simple validator on the return path.  
+2. Faithfulness high while multi-hop/paraphrase correctness lag — grounded but incomplete.  
 3. Refusal recall perfect, precision soft — system is cautious.  
-4. **Most of the correctness gap is retrieval (0.167), not generation (0.071).**
+4. Most of the correctness gap is **retrieval (0.167)**, not generation (0.071).  
+5. Faithfulness κ ≈ 0 despite 95% agreement — label imbalance, not a broken rubric.
 
 ---
 
-## Files
+## Files submitted
 
-- `labs/lab4/rag.py`  
-- `labs/lab4/evaluate.py`  
-- `labs/lab4/report.md`  
-- `reports/lab4.json`  
-- `labs/lab4/calibration_labels.jsonl` (hand-label for κ)  
+- `labs/lab4/rag.py`
+- `labs/lab4/evaluate.py`
+- `labs/lab4/report.md`
+- `labs/lab4/calibration_labels.jsonl`
+- `labs/lab4/calibrate_interactive.py`
+- `reports/lab4.json`

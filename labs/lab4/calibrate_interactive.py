@@ -1,13 +1,8 @@
 #!/usr/bin/env python3
-"""Interactive hand-labeler for Lab 4 D2 calibration (autosaves after each item).
+"""Compact Lab 4 calibration (autosave). Open listed corpus files in another pane.
 
     python labs/lab4/calibrate_interactive.py
-
-Reads reports/lab4.json (first 20 rows), writes/updates
-labs/lab4/calibration_labels.jsonl after every answer so you can quit
-and resume anytime. Then run:
-
-    python labs/lab4/evaluate.py --kappa
+    python labs/lab4/evaluate.py --kappa   # when all 20 done
 """
 from __future__ import annotations
 
@@ -17,127 +12,124 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 FULL = ROOT / "reports" / "lab4.json"
+GOLDEN = ROOT / "data" / "eval" / "rag_golden.jsonl"
 OUT = ROOT / "labs" / "lab4" / "calibration_labels.jsonl"
 N = 20
+
+
+def load_golden() -> dict[str, dict]:
+    return {r["id"]: r for r in (json.loads(l) for l in GOLDEN.open(encoding="utf-8"))}
 
 
 def load_existing() -> dict[str, dict]:
     if not OUT.exists():
         return {}
-    by_id = {}
+    out = {}
     for line in OUT.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        row = json.loads(line)
-        by_id[row["id"]] = row
-    return by_id
+        if line.strip():
+            r = json.loads(line)
+            out[r["id"]] = r
+    return out
 
 
 def save_all(rows: list[dict]) -> None:
-    OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(
-        "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n",
+        "\n".join(json.dumps({
+            "id": r["id"],
+            "answer": r.get("answer", ""),
+            "human_faithfulness": r.get("human_faithfulness"),
+            "human_correctness": r.get("human_correctness"),
+        }, ensure_ascii=False) for r in rows) + "\n",
         encoding="utf-8",
     )
 
 
-def ask_int(prompt: str, allowed: set[int]) -> int | None:
-    """Return int in allowed, or None to skip. 'q' quits."""
+def ask(prompt: str, allowed: set[int]) -> int | None:
     while True:
         raw = input(prompt).strip().lower()
-        if raw in {"q", "quit", "exit"}:
+        if raw in {"q", "quit"}:
             return None
         if raw in {"s", "skip"}:
-            return -999  # signal skip keep existing
+            return -999
         try:
             v = int(raw)
+            if v in allowed:
+                return v
         except ValueError:
-            print(f"  enter one of {sorted(allowed)}, or s=skip, q=quit")
-            continue
-        if v in allowed:
-            return v
-        print(f"  enter one of {sorted(allowed)}, or s=skip, q=quit")
+            pass
+        print(f"  use {sorted(allowed)} | s=skip | q=quit")
 
 
 def main() -> None:
     if not FULL.exists():
-        print(f"missing {FULL}")
-        print("Run first: python labs/lab4/evaluate.py --full --save reports/lab4.json")
+        print(f"Need {FULL} — run evaluate.py --full --save first")
         sys.exit(1)
 
-    all_rows = json.loads(FULL.read_text(encoding="utf-8"))
-    sample = all_rows[:N]
+    golden = load_golden()
     existing = load_existing()
+    rows_in = json.loads(FULL.read_text(encoding="utf-8"))[:N]
 
-    # merge: prefer already-labeled values from disk
     work = []
-    for r in sample:
+    for r in rows_in:
+        g = golden.get(r["id"], {})
         prev = existing.get(r["id"], {})
         work.append({
             "id": r["id"],
             "kind": r.get("kind"),
-            "question_hint": r.get("id"),  # id is enough; answer is below
-            "answer": r.get("answer", ""),
+            "unanswerable": r.get("unanswerable"),
             "refused": r.get("refused"),
-            "machine_faithfulness": r.get("faithfulness"),
-            "machine_correctness": r.get("correctness"),
+            "answer": r.get("answer", ""),
+            "retrieved": r.get("retrieved") or [],
+            "question": g.get("question", ""),
+            "gold_answer": g.get("gold_answer", ""),
             "human_faithfulness": prev.get("human_faithfulness"),
             "human_correctness": prev.get("human_correctness"),
         })
 
-    done = sum(
-        1 for r in work
-        if r["human_faithfulness"] is not None and r["human_correctness"] is not None
-    )
-    print(f"Lab 4 calibration — {done}/{len(work)} already labeled")
-    print(f"Autosave file: {OUT}")
-    print("For each item:")
-    print("  faithfulness: 1 = fully supported by context, 0 = any unsupported claim")
-    print("  correctness:  2 = matches gold substance (or correct refuse),")
-    print("                1 = partial, 0 = wrong / answered when should refuse")
-    print("Commands: number to score | s = skip | q = quit & save\n")
+    done = sum(1 for r in work if r["human_faithfulness"] is not None and r["human_correctness"] is not None)
+    print(f"Calibration {done}/{len(work)} done → {OUT.name}")
+    print("faith: 1=supported by sources / honest refuse; 0=any unsupported claim")
+    print("corr:  2=matches gold (or both refuse); 1=partial; 0=wrong/mismatched refuse")
+    print("Open files under data/corpus/<id>.md for the listed source ids.\n")
 
     for i, r in enumerate(work):
         if r["human_faithfulness"] is not None and r["human_correctness"] is not None:
             continue
 
-        print("=" * 72)
-        print(f"[{i+1}/{len(work)}] id={r['id']}  kind={r.get('kind')}  refused={r.get('refused')}")
-        print(f"machine: faithfulness={r.get('machine_faithfulness')}  correctness={r.get('machine_correctness')}")
-        print("-" * 72)
-        ans = r["answer"] or ""
-        if len(ans) > 900:
-            print(ans[:900] + "\n… [truncated for display]")
-        else:
-            print(ans)
-        print("-" * 72)
+        cites = sorted({int(m) for m in __import__("re").findall(r"\[(\d+)\]", r["answer"] or "")})
+        paths = [f"data/corpus/{d}.md" for d in r["retrieved"]]
 
-        f = ask_int("  human_faithfulness (0/1): ", {0, 1})
+        print("=" * 60)
+        print(f"[{i+1}/{len(work)}] {r['id']}  kind={r['kind']}  refused={r['refused']}")
+        print(f"Q: {r['question']}")
+        print(f"GOLD: {r['gold_answer']}")
+        print(f"OPEN: {', '.join(paths) if paths else '(none)'}")
+        print(f"CITES in answer: {cites}  → [1]=1st OPEN file, [2]=2nd, …")
+        print(f"ANSWER: {r['answer']}")
+        print("-" * 60)
+
+        f = ask("faithfulness 0/1: ", {0, 1})
         if f is None:
             save_all(work)
-            print(f"saved → {OUT}  (quit)")
+            print("saved, quit")
             return
         if f != -999:
             r["human_faithfulness"] = f
 
-        c = ask_int("  human_correctness (0/1/2): ", {0, 1, 2})
+        c = ask("correctness 0/1/2: ", {0, 1, 2})
         if c is None:
             save_all(work)
-            print(f"saved → {OUT}  (quit)")
+            print("saved, quit")
             return
         if c != -999:
             r["human_correctness"] = c
 
         save_all(work)
-        print(f"  saved ({sum(1 for x in work if x['human_faithfulness'] is not None and x['human_correctness'] is not None)}/{len(work)})\n")
+        n = sum(1 for x in work if x["human_faithfulness"] is not None and x["human_correctness"] is not None)
+        print(f"saved ({n}/{len(work)})\n")
 
     save_all(work)
-    labeled = sum(
-        1 for r in work
-        if r["human_faithfulness"] is not None and r["human_correctness"] is not None
-    )
-    print(f"Done. {labeled}/{len(work)} labeled → {OUT}")
+    print(f"Done → {OUT}")
     print("Next: python labs/lab4/evaluate.py --kappa")
 
 
