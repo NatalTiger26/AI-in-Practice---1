@@ -123,7 +123,8 @@ def classify(row: dict, q: dict, corpus: dict[str, str], *,
     if in_top_30 is True and not any_relevant_retrieved:
         if dropped_by_reranker:
             return 5, "gold was in top-30 retrieval but dropped by reranker"
-        return 4, "gold was in top-30 but not in final_k (ranking)"
+        else:
+            return 4, "gold was in top-30 but not in final_k (ranking)"
 
     # Without an explicit top-30 probe: if we have no overlap, ranking/embedding
     # failed to surface gold in the final window.

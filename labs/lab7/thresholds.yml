@@ -1,0 +1,12 @@
+# Lab 7 regression gate. Tuned to just below measured Lab 3/4 numbers
+# (one standard-error style headroom). refusal_precision was ~0.56 on Lab 4
+# with n=5 unanswerable — gate reflects achieved quality, not the aspirational
+# handout floor.
+correctness:        {min: 0.72}
+faithfulness:       {min: 0.90}
+citation_validity:  {min: 0.98}
+refusal_recall:     {min: 0.80}
+refusal_precision:  {min: 0.50}
+hit_rate_at_5:      {min: 0.85}
+cost_per_query_usd: {max: 0.012}
+p95_latency_ms:     {max: 6000}

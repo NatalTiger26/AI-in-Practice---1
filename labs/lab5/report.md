@@ -1,6 +1,9 @@
 # Lab 5 Report — Diagnose, Fix, Prove
 
-Input: `reports/lab4.json` (45 questions, **16 failures** with correctness < 2).
+**Starting point:** Lab 4 system, `reports/lab4.json`  
+**Failures to explain:** 16 out of 45 questions (correctness score below 2)
+
+Commands used:
 
 ```bash
 python labs/lab5/diagnose.py --input reports/lab4.json --pareto
@@ -9,20 +12,29 @@ python labs/lab5/fix_pipeline.py --before-after --save reports/lab5_before_after
 
 ---
 
-## Part A — Failure classification
+## 1. What went wrong? (Part A — classify)
 
-### Improved `answer_in_corpus`
+Lab 5 says: every wrong answer fails at **exactly one stage**. Classify first; do not guess a fix.
 
-Shipped test was token-overlap only (false “missing content” on reworded numbers).  
-**Change:** also require key **numbers** from gold in relevant docs, plus a light alphanumeric n-gram match. Present if numbers match (when any) and (token OR n-gram) hits.
+### Better “is the answer in the corpus?” check
 
-### Tally (completed diagnostic tree)
+The starter `answer_in_corpus` only counted long words. That can miss answers that use different wording but the same numbers.
 
-| Mode | Name | n | share |
+**What I changed:** also check that numbers in the gold answer appear in the relevant docs, and allow a short character n-gram match. So we do not wrongly call something “missing from the corpus” when the facts are actually there.
+
+### Failure tally
+
+| Failure mode | Meaning (short) | Count | Share |
 |---|---|---|---|
-| **6** | **generation** | **15** | **93.8%** |
-| 2 | chunk_boundary | 1 | 6.2% |
-| 1, 3, 4, 5, 7 | — | 0 | 0% |
+| **6 — generation** | Right docs were retrieved, but the written answer is still wrong/incomplete | **15** | **94%** |
+| 2 — chunk boundary | Answer may be split across chunks (needs a human look) | **1** | 6% |
+| 1 missing content | Fact not in corpus at all | 0 | 0% |
+| 3 embedding mismatch | Query and chunk don’t match in vector space | 0 | 0% |
+| 4 ranking | Gold found early, then lost in top-k | 0 | 0% |
+| 5 reranker | Reranker dropped a good hit | 0 | 0% |
+| 7 presentation | Answer right, citations broken | 0 | 0% |
+
+Pareto chart (from the script):
 
 ```
 failure mode          n    share   cumulative
@@ -30,108 +42,134 @@ generation            15   93.8%   93.8%  ████████████�
 chunk_boundary         1    6.2%  100.0%  ██
 ```
 
-### Why mode 6 (not inverted)
+**Almost all failures are generation.** That is not a bug in the classifier — it matches Lab 4: when we gave the model the gold documents, correctness jumped to 0.929. The model can write good answers; on these 16 it often had the right docs and still wrote a weak answer.
 
-For 15/16 failures, a **relevant doc id appears in `retrieved`**. Gold was available to the generator; the answer was still incomplete/wrong → **generation**.
+### How I knew it was generation (not retrieval)
 
-> Gold context *fixing* the answer ⇒ retrieval fault. Gold already in context and still wrong ⇒ generation.
+For 15 of the 16 failures, the **correct document id was already in the retrieved list**.  
+So the model saw the right source and still scored 0 or 1.
 
-### A2 · human check
+Important rule from the handout (easy to get backwards):
 
-| id | note |
-|---|---|
-| Q37 | needs_human_check — unanswerable/partial (Singapore limit). Missing numeric addendum (Lab 4 C2); more refusal/generation edge than a pure boundary split. |
+- If **gold context fixes** the answer → the problem was **retrieval**  
+- If gold was **already in context** and the answer is still bad → the problem is **generation**
 
-### A3
+Here: gold was already in context → mode 6.
 
-Dominant cluster = **generation (15)**. Secondary = chunk_boundary (1).
+### The one case that needed a human check
+
+| Question | Auto label | What I think |
+|---|---|---|
+| Q37 | chunk_boundary / needs_human_check | Singapore cover / limit — corpus does not fully support the limit (Lab 4). Closer to “cannot fully answer” than a pure chunk-split bug. |
 
 ---
 
-## Part B — Rank by expected value
+## 2. What should we fix first? (Part B — rank)
 
-| Cluster | n | Fix | Est. recovery | Cost Δ | Effort |
+| Cluster | Size | Possible fix | Expected recoveries | Extra cost? | Effort |
 |---|---|---|---|---|---|
-| **6 generation** | 15 | `final_k=3` + multi-part instruction | 4–6 | ~0 | low |
-| 2 boundary | 1 | larger chunks / overlap | 0–1 | 0 | medium |
+| **Generation** | 15 | Use fewer context chunks + clearer “answer every part” instruction | **4–6** | No extra API calls | Low |
+| Chunk boundary | 1 | Bigger chunks / more overlap | 0–1 | No | Medium |
 
-**Pick: mode 6** — largest cluster; no extra model calls; matches the tally.
+**Choice: fix generation.**
 
-### Prediction (before implementing)
+One sentence why: it is almost the whole backlog (15/16), the fix is cheap (no HyDE, no second model call), and the diagnosis says retrieval is not the main problem for these failures.
 
-> Recover **4–6 of 15** generation failures; cost ≤ 2× (expect ≈1×); minimal regression on former passes.
+### Prediction (written *before* coding the fix)
 
----
+I expect this change to:
 
-## Part C — Fix (one variable)
+1. Fully fix **about 4 to 6** of the 15 generation failures (score moves to 2).  
+2. Keep cost about the **same** as Lab 4 generate (≤ 2× allowed; I expect ~1×).  
+3. **Not** break questions that already worked (check a small pass sample).
 
-**v2** in `labs/lab5/fix_pipeline.py`:
-
-1. `final_k` 5 → **3** (fewer distractors)  
-2. Multi-part instruction: answer every supported part; refuse only the unsupported part  
-
-No change to chunking, embeddings, hybrid, or reranker.
+I will compare this prediction to the measured numbers in section 4.
 
 ---
 
-## Part D — Prove it (from `reports/lab5_before_after.json`)
+## 3. What I changed (Part C — one fix only)
 
-Scored **24** questions: **16** former failures + **8** former passes.
+File: `labs/lab5/fix_pipeline.py` (v2 pipeline).
 
-### D1 · before / after
+**Only two generation-side changes:**
 
-| Metric | v1 | v2 | Δ |
+1. **Fewer distractors:** keep **3** chunks for the model instead of 5 (`final_k=3`).  
+2. **Multi-part instruction:** if the question has several parts, answer every part the sources support; only refuse the part that is missing.
+
+**What I did not change:** chunking, embeddings, hybrid search, reranker.  
+Those would be right for retrieval modes. Our tally said generation.
+
+---
+
+## 4. Did it work? (Part D — measure)
+
+Measured on **16 old failures + 8 old passes** (24 questions), saved in `reports/lab5_before_after.json`.
+
+### Before vs after
+
+| Metric | Before (v1) | After (v2) | Change |
 |---|---|---|---|
-| Correctness on failures (norm, /2) | **0.375** | **0.562** | **+0.187** |
-| Correctness on failures (raw 0–2 mean) | 0.75 | 1.125 | +0.375 |
-| Faithfulness on failures | 0.938 | **1.000** | +0.062 |
-| Recovered (corr &lt; 2 → 2) | — | **4 / 16** | |
-| Regressions on former passes | — | **0** | |
-| Citation validity (v2 subset) | — | **1.000** | |
-| Cost (24 Q run) | — | $0.237 · p95 4.8 s | no extra calls/query |
+| Correctness on the 16 failures (0–1 scale) | 0.375 | **0.562** | **+0.187** |
+| Faithfulness on those failures | 0.94 | **1.00** | +0.06 |
+| Failures fully fixed (score → 2) | — | **4 out of 16** | |
+| Old passes that broke | — | **0** | |
+| Citations still valid | — | **1.00** on this set | |
+| Cost for this run | — | $0.24 for 24 questions, p95 ~4.8 s | no extra calls per question |
 
-**Recovered IDs:** Q10, Q22, Q29, Q41  
+**Which failures got fixed:** Q10, Q22, Q29, Q41  
 
-**Still failing (12):** Q04, Q05, Q11, Q19, Q20, Q21, Q23, Q26, Q32, Q35, Q37, Q44  
-(mostly multi_hop / aggregation / paraphrase still partial)
+**Still wrong (12):** Q04, Q05, Q11, Q19, Q20, Q21, Q23, Q26, Q32, Q35, Q37, Q44  
+Most of these are multi-hop or need several facts in one answer — still a generation gap.
 
-**Prediction vs actual:** predicted 4–6 recoveries → measured **4**. Met at the low end.
+### Prediction vs reality
 
-### D2 · regression check
+| | Predicted | Measured |
+|---|---|---|
+| Recoveries | 4–6 | **4** |
+| Regressions | minimal | **0** |
+| Cost | ~1× | no extra model calls |
 
-| Check | Result |
-|---|---|
-| Former passes (n=8) mean correctness | v1 = 2.0, v2 = 2.0 — **no drop** |
-| Regressions | **0** |
-| Extra retrieval/LLM calls | **none** (same generate path, smaller context) |
-| Refusal on failure subset | 3 refused under v2 (includes hard/unanswerable edges) |
+The prediction was **right at the low end**. Not a huge win, but real and matched what we said before implementing.
 
-Nothing on the pass sample got worse.
+### Regression check (did anything get worse?)
 
-### D3 · after fix
+- 8 questions that already scored 2: still score 2.  
+- No new citation failures on this set.  
+- Did not add HyDE/multi-query, so cost did not double.
 
-4 failures moved to full correctness. Remaining 12 still pattern as **generation** (incomplete multi-hop / missing clause), not a shift into ranking/embedding modes. Retrieval was not the lever for this cluster.
+### After the fix, what does the backlog look like?
 
-### D4 · next fix
+Still mostly **generation** (hard multi-hop / incomplete answers). We did not uncover a hidden ranking problem — we only made some generation failures easier.
 
-**Multi-hop decomposition** on `kind==multi_hop` only (separate retrieve+generate per sub-question, merge). Measure on that subset; expect higher cost on those queries only.
+### What I would try next
 
----
-
-## Honesty
-
-1. Incomplete classifier first labelled 100% `chunk_boundary` — unfinished tree, not the true backlog.  
-2. Recovery **4/16** is real but modest; no claim of a large full-set jump.  
-3. Retrieval-first fixes (hybrid/HyDE) would have targeted the wrong stage given gold-in-context.
+For remaining **multi_hop** questions only: split the question into sub-questions, retrieve and answer each, then merge. That will cost more on those queries; measure only on the multi_hop subset.
 
 ---
 
-## Files
+## 5. Honest notes
 
-| file | role |
+1. **First diagnose run** (before the tree was finished) said 100% chunk_boundary. That was incomplete code, not the real story. After finishing the branches, the real story was **94% generation**.  
+2. **4 recoveries out of 16** is progress, not a solved system.  
+3. Jumping to hybrid search or HyDE would have ignored the diagnosis (gold docs were already retrieved).
+
+---
+
+## 6. Files to submit
+
+| File | What it is |
 |---|---|
-| `labs/lab5/diagnose.py` | mode-1 improvement + classify tree |
-| `labs/lab5/fix_pipeline.py` | mode-6 fix + before/after harness |
-| `labs/lab5/report.md` | this file |
-| `reports/lab5_diagnosis.json` | mode tally |
-| `reports/lab5_before_after.json` | measured recoveries (Q10, Q22, Q29, Q41) |
+| `labs/lab5/diagnose.py` | Classifier (better corpus check + full mode tree) |
+| `labs/lab5/fix_pipeline.py` | The one generation fix + before/after runner |
+| `labs/lab5/report.md` | This report |
+| `reports/lab5_diagnosis.json` | Per-failure mode labels |
+| `reports/lab5_before_after.json` | Measured v1 vs v2 scores |
+
+---
+
+## Bottom line
+
+1. **Diagnose:** 15/16 failures = generation (right docs, weak answer).  
+2. **Predict:** recover 4–6 with fewer chunks + multi-part prompt.  
+3. **Fix:** only that generation change.  
+4. **Measure:** recovered **4**, **0** regressions, prediction held.
